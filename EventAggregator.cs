@@ -5,19 +5,19 @@ using System.Reflection;
 using System.Threading;
 using NLog;
 
-namespace Engine.Support.EventAggregator
+namespace EventManagement
 {
     // Directly copied from caliburn's EventAggregator: https://github.com/Caliburn-Micro/Caliburn.Micro/blob/316042591f3a70346e1bd92daa900565eafdb50d/src/Caliburn.Micro/EventAggregator.cs
     // The only change made was to remove the thread marshaller.
     public class EventAggregator : IEventAggregator
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-        
+
         private readonly List<Handler> _handlers = new List<Handler>();
-        
+
         /// <summary>
-        /// Searches the subscribed handlers to check if we have a handler for
-        /// the message type supplied.
+        ///     Searches the subscribed handlers to check if we have a handler for
+        ///     the message type supplied.
         /// </summary>
         /// <param name="messageType">The message type to check with</param>
         /// <returns>True if any handler is found, false if not.</returns>
@@ -27,15 +27,15 @@ namespace Engine.Support.EventAggregator
         }
 
         /// <summary>
-        /// Subscribes an instance to all events declared through implementations of IHandle
+        ///     Subscribes an instance to all events declared through implementations of IHandle
         /// </summary>
         /// <param name="subscriber">The instance to subscribe for event publication.</param>
         public virtual void Subscribe(object subscriber)
         {
             if (subscriber == null)
                 throw new ArgumentNullException(nameof(subscriber));
-            List<Handler> handlers = _handlers;
-            bool lockTaken = false;
+            var handlers = _handlers;
+            var lockTaken = false;
             try
             {
                 Monitor.Enter(handlers, ref lockTaken);
@@ -56,12 +56,12 @@ namespace Engine.Support.EventAggregator
         {
             if (subscriber == null)
                 throw new ArgumentNullException(nameof(subscriber));
-            List<Handler> handlers = _handlers;
-            bool lockTaken = false;
+            var handlers = _handlers;
+            var lockTaken = false;
             try
             {
                 Monitor.Enter(handlers, ref lockTaken);
-                Handler handler = _handlers.FirstOrDefault(x => x.Matches(subscriber));
+                var handler = _handlers.FirstOrDefault(x => x.Matches(subscriber));
                 if (handler == null)
                     return;
                 _handlers.Remove(handler);
@@ -79,7 +79,7 @@ namespace Engine.Support.EventAggregator
         {
             if (message == null)
                 throw new ArgumentNullException(nameof(message));
-            
+
             var messageType = message.GetType();
 
             if (_handlers.All(handler => !handler.Handles(messageType)))
@@ -87,72 +87,56 @@ namespace Engine.Support.EventAggregator
                 Logger.Warn($"{messageType} has no handler.");
                 return;
             }
-            
+
             var handlersToRemove = _handlers
                 .Where(handler => !handler.Handle(messageType, message))
                 .ToList();
-            
-            if (!handlersToRemove.Any())
-            {
-                return;
-            }
-            
-            foreach (var handler in handlersToRemove)
-            {
-                _handlers.Remove(handler);
-            }
+
+            if (!handlersToRemove.Any()) return;
+
+            foreach (var handler in handlersToRemove) _handlers.Remove(handler);
         }
 
-        private class Handler 
+        private class Handler
         {
             private readonly WeakReference _reference;
             private readonly Dictionary<Type, MethodInfo> _supportedHandlers = new Dictionary<Type, MethodInfo>();
 
-            public bool IsDead => _reference.Target == null;
-
-            public Handler(object handler) 
+            public Handler(object handler)
             {
                 _reference = new WeakReference(handler);
 
                 var interfaces = handler.GetType().GetInterfaces().Where(x => typeof(IHandle).IsAssignableFrom(x) && x.IsGenericType);
 
-                foreach(var @interface in interfaces)
+                foreach (var @interface in interfaces)
                 {
                     var type = @interface.GetGenericArguments()[0];
-                    var method = @interface.GetMethod("Handle", new[] { type });
+                    var method = @interface.GetMethod("Handle", new[] {type});
 
-                    if (method != null) 
-                    {
-                        _supportedHandlers[type] = method;
-                    }
+                    if (method != null) _supportedHandlers[type] = method;
                 }
             }
 
-            public bool Matches(object instance) 
+            public bool IsDead => _reference.Target == null;
+
+            public bool Matches(object instance)
             {
                 return _reference.Target == instance;
             }
 
-            public bool Handle(Type messageType, object message) 
+            public bool Handle(Type messageType, object message)
             {
                 var target = _reference.Target;
-                if (target == null) 
-                {
-                    return false;
-                }
+                if (target == null) return false;
 
-                foreach(var pair in _supportedHandlers) 
-                {
-                    if(pair.Key.IsAssignableFrom(messageType))
-                    {
+                foreach (var pair in _supportedHandlers)
+                    if (pair.Key.IsAssignableFrom(messageType))
                         pair.Value.Invoke(target, new[] {message});
-                    }
-                }
-                
+
                 return true;
             }
 
-            public bool Handles(Type messageType) 
+            public bool Handles(Type messageType)
             {
                 return _supportedHandlers.Any(pair => pair.Key.IsAssignableFrom(messageType));
             }
