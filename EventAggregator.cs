@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
-using NLog;
 
 namespace EventManagement
 {
@@ -11,8 +10,6 @@ namespace EventManagement
     // The only change made was to remove the thread marshaller.
     public class EventAggregator : IEventAggregator
     {
-        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-
         private readonly List<Handler> _handlers = new List<Handler>();
 
         /// <summary>
@@ -33,20 +30,28 @@ namespace EventManagement
         public virtual void Subscribe(object subscriber)
         {
             if (subscriber == null)
+            {
                 throw new ArgumentNullException(nameof(subscriber));
+            }
+
             var handlers = _handlers;
             var lockTaken = false;
             try
             {
                 Monitor.Enter(handlers, ref lockTaken);
                 if (_handlers.Any(x => x.Matches(subscriber)))
+                {
                     return;
+                }
+
                 _handlers.Add(new Handler(subscriber));
             }
             finally
             {
                 if (lockTaken)
+                {
                     Monitor.Exit(handlers);
+                }
             }
         }
 
@@ -55,7 +60,10 @@ namespace EventManagement
         public virtual void Unsubscribe(object subscriber)
         {
             if (subscriber == null)
+            {
                 throw new ArgumentNullException(nameof(subscriber));
+            }
+
             var handlers = _handlers;
             var lockTaken = false;
             try
@@ -63,13 +71,18 @@ namespace EventManagement
                 Monitor.Enter(handlers, ref lockTaken);
                 var handler = _handlers.FirstOrDefault(x => x.Matches(subscriber));
                 if (handler == null)
+                {
                     return;
+                }
+
                 _handlers.Remove(handler);
             }
             finally
             {
                 if (lockTaken)
+                {
                     Monitor.Exit(handlers);
+                }
             }
         }
 
@@ -78,13 +91,14 @@ namespace EventManagement
         public virtual void Publish(object message)
         {
             if (message == null)
+            {
                 throw new ArgumentNullException(nameof(message));
+            }
 
             var messageType = message.GetType();
 
             if (_handlers.All(handler => !handler.Handles(messageType)))
             {
-                Logger.Warn($"{messageType} has no handler.");
                 return;
             }
 
@@ -92,7 +106,10 @@ namespace EventManagement
                 .Where(handler => !handler.Handle(messageType, message))
                 .ToList();
 
-            if (!handlersToRemove.Any()) return;
+            if (!handlersToRemove.Any())
+            {
+                return;
+            }
 
             foreach (var handler in handlersToRemove) _handlers.Remove(handler);
         }
@@ -113,7 +130,10 @@ namespace EventManagement
                     var type = @interface.GetGenericArguments()[0];
                     var method = @interface.GetMethod("Handle", new[] {type});
 
-                    if (method != null) _supportedHandlers[type] = method;
+                    if (method != null)
+                    {
+                        _supportedHandlers[type] = method;
+                    }
                 }
             }
 
@@ -127,11 +147,16 @@ namespace EventManagement
             public bool Handle(Type messageType, object message)
             {
                 var target = _reference.Target;
-                if (target == null) return false;
+                if (target == null)
+                {
+                    return false;
+                }
 
                 foreach (var pair in _supportedHandlers)
                     if (pair.Key.IsAssignableFrom(messageType))
+                    {
                         pair.Value.Invoke(target, new[] {message});
+                    }
 
                 return true;
             }
