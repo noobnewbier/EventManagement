@@ -10,7 +10,7 @@ namespace EventManagement
     // The only change made was to remove the thread marshaller.
     public class EventAggregator : IEventAggregator
     {
-        private readonly List<Handler> _handlers = new List<Handler>();
+        private readonly List<Handler> _handlers = new();
 
         /// <summary>
         ///     Searches the subscribed handlers to check if we have a handler for
@@ -29,29 +29,20 @@ namespace EventManagement
         /// <param name="subscriber">The instance to subscribe for event publication.</param>
         public virtual void Subscribe(object subscriber)
         {
-            if (subscriber == null)
-            {
-                throw new ArgumentNullException(nameof(subscriber));
-            }
+            if (subscriber == null) throw new ArgumentNullException(nameof(subscriber));
 
             var handlers = _handlers;
             var lockTaken = false;
             try
             {
                 Monitor.Enter(handlers, ref lockTaken);
-                if (_handlers.Any(x => x.Matches(subscriber)))
-                {
-                    return;
-                }
+                if (_handlers.Any(x => x.Matches(subscriber))) return;
 
                 _handlers.Add(new Handler(subscriber));
             }
             finally
             {
-                if (lockTaken)
-                {
-                    Monitor.Exit(handlers);
-                }
+                if (lockTaken) Monitor.Exit(handlers);
             }
         }
 
@@ -59,10 +50,7 @@ namespace EventManagement
         /// <param name="subscriber">The instance to unsubscribe.</param>
         public virtual void Unsubscribe(object subscriber)
         {
-            if (subscriber == null)
-            {
-                throw new ArgumentNullException(nameof(subscriber));
-            }
+            if (subscriber == null) throw new ArgumentNullException(nameof(subscriber));
 
             var handlers = _handlers;
             var lockTaken = false;
@@ -70,19 +58,13 @@ namespace EventManagement
             {
                 Monitor.Enter(handlers, ref lockTaken);
                 var handler = _handlers.FirstOrDefault(x => x.Matches(subscriber));
-                if (handler == null)
-                {
-                    return;
-                }
+                if (handler == null) return;
 
                 _handlers.Remove(handler);
             }
             finally
             {
-                if (lockTaken)
-                {
-                    Monitor.Exit(handlers);
-                }
+                if (lockTaken) Monitor.Exit(handlers);
             }
         }
 
@@ -90,26 +72,17 @@ namespace EventManagement
         /// <param name="message">The message instance.</param>
         public virtual void Publish(object message)
         {
-            if (message == null)
-            {
-                throw new ArgumentNullException(nameof(message));
-            }
+            if (message == null) throw new ArgumentNullException(nameof(message));
 
             var messageType = message.GetType();
 
-            if (_handlers.All(handler => !handler.Handles(messageType)))
-            {
-                return;
-            }
+            if (_handlers.All(handler => !handler.Handles(messageType))) return;
 
             var handlersToRemove = _handlers
                 .Where(handler => !handler.Handle(messageType, message))
                 .ToList();
 
-            if (!handlersToRemove.Any())
-            {
-                return;
-            }
+            if (!handlersToRemove.Any()) return;
 
             foreach (var handler in handlersToRemove) _handlers.Remove(handler);
         }
@@ -117,7 +90,7 @@ namespace EventManagement
         private class Handler
         {
             private readonly WeakReference _reference;
-            private readonly Dictionary<Type, MethodInfo> _supportedHandlers = new Dictionary<Type, MethodInfo>();
+            private readonly Dictionary<Type, MethodInfo> _supportedHandlers = new();
 
             public Handler(object handler)
             {
@@ -128,35 +101,24 @@ namespace EventManagement
                 foreach (var @interface in interfaces)
                 {
                     var type = @interface.GetGenericArguments()[0];
-                    var method = @interface.GetMethod("Handle", new[] {type});
+                    var method = @interface.GetMethod("Handle", new[] { type });
 
-                    if (method != null)
-                    {
-                        _supportedHandlers[type] = method;
-                    }
+                    if (method != null) _supportedHandlers[type] = method;
                 }
             }
 
             public bool IsDead => _reference.Target == null;
 
-            public bool Matches(object instance)
-            {
-                return _reference.Target == instance;
-            }
+            public bool Matches(object instance) => _reference.Target == instance;
 
             public bool Handle(Type messageType, object message)
             {
                 var target = _reference.Target;
-                if (target == null)
-                {
-                    return false;
-                }
+                if (target == null) return false;
 
                 foreach (var pair in _supportedHandlers)
                     if (pair.Key.IsAssignableFrom(messageType))
-                    {
-                        pair.Value.Invoke(target, new[] {message});
-                    }
+                        pair.Value.Invoke(target, new[] { message });
 
                 return true;
             }
